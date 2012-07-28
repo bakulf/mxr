@@ -1,4 +1,8 @@
 #!/usr/bin/ruby
+#
+# MXR - BSD License - Andrea Marchesini <baku@ippolita.net>
+# https://github.com/bakulf/mxr/
+#
 
 require 'rubygems'
 require 'hpricot'
@@ -96,7 +100,7 @@ class Mxr
     end
   end
 
-  # The open-uri + hpricot is done in a separated thread:
+  # The open-uri + hpricot is executed in a separated thread:
   def getContent
     doc = nil
     Thread.new do
