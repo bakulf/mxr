@@ -27,6 +27,7 @@ class Mxr
   LINE   = 'green'
   FILE   = 'yellow'
   CMD    = 'cyan'
+  PAGER  = 'less -FRSX'
 
   DEFAULT_TREE = 'mozilla-central'
 
@@ -36,20 +37,24 @@ class Mxr
   attr_accessor :path
   attr_accessor :color
   attr_accessor :line
+  attr_accessor :tool
 
-  # colorize a string
-  def color(str, color, bold = false)
-    return str if @color == false
-
-    str = str.send color
-    str = str.bold if bold
-    str
-  end
-
-  # the output is sent to 'less -FRSX'
   def run
+    # no tool:
+    if @tool.nil?
+      @wr = $stdout
+      main
+      return
+    end
+
+    # with a tool
     rd, @wr = IO.pipe
-    if fork
+
+    if Process.fork
+      trap("INT") do
+        puts "Write 'q' to exit"
+      end
+
       rd.close
 
       # this does the magic
@@ -60,15 +65,36 @@ class Mxr
     else
       @wr.close
       $stdin.reopen(rd)
-      cmd = 'less -FRSX'
-      cmd += " +#{@line}" if @line != 0
+
+      cmd = @tool.to_s
+      cmd += " +#{@line}" if @line.is_a? Fixnum and @line != 0
+
       exec cmd
+
+      @wr.close
+      @wr = nil
+      exit
     end
+  end
+
+protected
+  # colorize a string
+  def color(str, color, bold = false)
+    return str if @color == false
+
+    str = str.send color
+    str = str.bold if bold
+    str
   end
 
   # Write the output
   def write(msg)
-    @wr.write msg
+    return if @wr.nil?
+
+    begin
+      @wr.write msg
+    rescue
+    end
   end
 
   # helper:
@@ -147,6 +173,7 @@ private
   end
 end
 
+# identifier
 class MxrIdentifier < Mxr
   def main
     @url = "https://mxr.mozilla.org/#{@tree}/ident?i=#{CGI.escape(@input)}&tree=#{CGI.escape(@tree)}"
@@ -172,6 +199,7 @@ class MxrIdentifier < Mxr
   end
 end
 
+# full-text search
 class MxrSearch < Mxr
   def main
     @url = "https://mxr.mozilla.org/#{@tree}/search?string=#{CGI.escape(@input)}"
@@ -207,6 +235,7 @@ class MxrSearch < Mxr
   end
 end
 
+# filenames
 class MxrFile < Mxr
   def main
     @url = "https://mxr.mozilla.org/#{@tree}/find?string=#{CGI.escape(@input)}"
@@ -234,6 +263,7 @@ class MxrFile < Mxr
   end
 end
 
+# browse a single file
 class MxrBrowse < Mxr
   def main
     @url = "https://mxr.mozilla.org/#{@tree}/source/#{@input}"
@@ -276,6 +306,51 @@ private
     end
 
     text
+  end
+end
+
+# A simple shell:
+class MxrShell < Mxr
+  LIST = [ { :cmd => 'identifier', :class => MxrIdentifier },
+           { :cmd => 'search',     :class => MxrSearch     },
+           { :cmd => 'file',       :class => MxrFile       },
+           { :cmd => 'browse',     :class => MxrBrowse     } ]
+
+  def run
+    require 'readline'
+
+    cmds = []
+    LIST.each do |c| cmds.push c[:cmd] end
+    comp = proc { |s| cmds.grep( /^#{Regexp.escape(s)}/ ) }
+
+    Readline.completion_append_character = " "
+    Readline.completion_proc = comp
+
+    while line = Readline.readline('mxr> ', true)
+      p = line.split
+      next if p.empty?
+
+      break if 'quit'.start_with? p[0]
+
+      cmd = nil
+      LIST.each do |c|
+        if c[:cmd].start_with? p[0]
+          cmd = c[:class]
+        end
+      end
+
+      if cmd.nil?
+        puts p[0] + ': command not found'
+      else
+        cmd = cmd.new
+        cmd.tree  = @tree
+        cmd.path  = @path
+        cmd.color = @color
+        cmd.tool  = @tool
+        cmd.input = p[1]
+        cmd.run
+      end
+    end
   end
 end
 
@@ -324,6 +399,17 @@ opts = OptionParser.new do |opts|
   opts.on('-t', '--tree <something>',
           "Set a tree (default: #{Mxr::DEFAULT_TREE}).") do |something|
     options[:tree] = something
+  end
+
+  options[:tool] = Mxr::PAGER
+  opts.on('-t', '--tool <tool>',
+          "The tool for showing the result. Default: #{Mxr::PAGER}") do |something|
+    options[:tool] = something
+  end
+
+  opts.on('-T', '--no-tool',
+          "No external tool is used for showing the result.") do
+    options[:tool] = nil
   end
 
   options[:path] = nil
@@ -376,13 +462,13 @@ elsif not options[:browse].nil?
   task.input = options[:browse]
 
 else
-  puts opts
-  exit
+  task = MxrShell.new
 end
 
 task.tree = options[:tree]
 task.path = options[:path]
 task.color = options[:color]
 task.line = options[:line]
+task.tool = options[:tool]
 
 task.run
