@@ -70,6 +70,7 @@ class Mxr
       print
 
       @wr.close
+      @wr = nil
       Process.wait
     else
       @wr.close
@@ -79,34 +80,29 @@ class Mxr
       cmd += " +#{@line}" if @line.is_a? Fixnum and @line != 0
 
       exec cmd
-
-      @wr.close
-      @wr = nil
       exit
     end
   end
 
 protected
   def showFileId
-    return if @showFiles == false
-    return color "(#{@files.length - 1}) ", Mxr::FILEID
+    color "(#{@files.length - 1}) ", Mxr::FILEID if @showFiles == true
   end
 
   # colorize a string
   def color(str, color, bold = false)
-    return str if @color == false
+    if @color == true
+      str = str.send color
+      str = str.bold if bold
+    end
 
-    str = str.send color
-    str = str.bold if bold
     str
   end
 
   # Write the output
   def write(msg)
-    return if @wr.nil?
-
     begin
-      @wr.write msg
+      @wr.write msg unless @wr.nil?
     rescue
     end
   end
@@ -153,9 +149,8 @@ protected
           Hpricot(f)
         end
       rescue
+        doc = false
       end
-
-      doc = false
     end
 
     cursor = '|/-\\'
@@ -365,7 +360,12 @@ end
 class MxrShell < Mxr
 
   def run
-    require 'readline'
+    begin
+      require 'readline'
+    rescue
+      puts "lib readline is required for mxr in shell mode."
+      exit
+    end
 
     cmds = []
     Mxr::LIST.each do |c| cmds.push c[:cmd] end
@@ -466,7 +466,13 @@ opts = OptionParser.new do |opts|
   options[:color] = false
   opts.on('-c', '--color',
           'Enable the ASCII colors.') do
-    require 'colored'
+    begin
+      require 'colored'
+    rescue
+      puts '"colored" gem is required for colored output'
+      exit
+    end
+
     options[:color] = true
   end
 
