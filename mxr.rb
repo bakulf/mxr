@@ -26,6 +26,7 @@ class Mxr
   RESULT = 'red'
   LINE   = 'green'
   FILE   = 'yellow'
+  FILEID = 'cyan'
   PAGER  = 'less -FRSX'
 
   DEFAULT_TREE = 'mozilla-central'
@@ -37,27 +38,34 @@ class Mxr
   attr_accessor :color
   attr_accessor :line
   attr_accessor :tool
+  attr_accessor :files
+  attr_accessor :showFiles
+
+  def initialize
+    @files = []
+    @showFiles = false
+  end
 
   def run
     # no tool:
     if @tool.nil?
       @wr = $stdout
       main
+      print
       return
     end
+
+    # the main operation
+    main
 
     # with a tool
     rd, @wr = IO.pipe
 
     if Process.fork
-      trap("INT") do
-        puts "Write 'q' to exit"
-      end
-
       rd.close
 
-      # this does the magic
-      main
+      # print the output
+      print
 
       @wr.close
       Process.wait
@@ -77,6 +85,11 @@ class Mxr
   end
 
 protected
+  def showFileId
+    return if @showFiles == false
+    return color "(#{@files.length - 1}) ", Mxr::FILEID
+  end
+
   # colorize a string
   def color(str, color, bold = false)
     return str if @color == false
@@ -105,13 +118,18 @@ protected
 
   # horrible MXR html parser:
   def show(filename, ul)
-    write "\nFile: #{color(getPath + filename, Mxr::FILE)}\n"
+    @files.push({ :file => filename, :line => 0})
+    write "\nFile: #{showFileId}#{color(getPath + filename, Mxr::FILE)}\n"
 
     return unless ul.children.is_a? Array
     ul.children.each do |info|
       next unless info.is_a? Hpricot::Elem
       next unless info.name  == 'li'
-      write "Line: #{color(info.at('a').inner_html.split(' ')[1].to_s, Mxr::LINE)}"
+
+      line = info.at('a').inner_html.split(' ')[1]
+      @files.push({ :file => filename, :line => line})
+
+      write "Line: #{showFileId}#{color(line.to_s, Mxr::LINE)}"
       write " -> "
       text = showText(info).gsub("\n", ' ')
       pos = text.index ' -- '
@@ -127,7 +145,7 @@ protected
   # The open-uri + hpricot is executed in a separated thread:
   def getContent
     doc = nil
-    Thread.new do
+    th = Thread.new do
       doc = open(@url) do |f|
         Hpricot(f)
       end
@@ -136,13 +154,14 @@ protected
     cursor = '|/-\\'
     i = 0
     while doc.nil?
-      print "Retriving data #{cursor[i%cursor.length].chr}\r"
+      STDOUT.write "Retriving data #{cursor[i%cursor.length].chr}\r"
       STDOUT.flush
       sleep 0.1
       i += 1
     end
 
-    doc
+    th.join
+    @doc = doc
   end
 
 private
@@ -166,11 +185,13 @@ end
 class MxrIdentifier < Mxr
   def main
     @url = "https://mxr.mozilla.org/#{@tree}/ident?i=#{CGI.escape(@input)}&tree=#{CGI.escape(@tree)}"
-    doc = getContent
+    getContent
+  end
 
-    write "Result for: #{color(doc.at('//h1').inner_html, Mxr::RESULT, true)}\n"
+  def print
+    write "Result for: #{color(@doc.at('//h1').inner_html, Mxr::RESULT, true)}\n"
 
-    doc.search('/html/body/ul').each do |ul|
+    @doc.search('/html/body/ul').each do |ul|
       next unless ul.children.is_a? Array
       ul.children.each do |li|
         next unless li.is_a? Hpricot::Elem and
@@ -192,14 +213,16 @@ end
 class MxrSearch < Mxr
   def main
     @url = "https://mxr.mozilla.org/#{@tree}/search?string=#{CGI.escape(@input)}"
-    doc = getContent
+    getContent
+  end
 
-    write "Result for: #{color(doc.at('//h1').inner_html, Mxr::RESULT, true)}\n"
+  def print
+    write "Result for: #{color(@doc.at('//h1').inner_html, Mxr::RESULT, true)}\n"
 
     newBlock = true
     filename = nil
 
-    doc.search('/html/body/*').each do |e|
+    @doc.search('/html/body/*').each do |e|
       next unless e.is_a? Hpricot::Elem
 
       if e.name == 'a'
@@ -228,11 +251,13 @@ end
 class MxrFile < Mxr
   def main
     @url = "https://mxr.mozilla.org/#{@tree}/find?string=#{CGI.escape(@input)}"
-    doc = getContent
+    getContent
+  end
 
+  def print
     write "Result for: #{color(@input, Mxr::RESULT, true)}\n\n"
 
-    doc.search('/html/body/span').each do |span|
+    @doc.search('/html/body/span').each do |span|
       next unless span.children.is_a? Array
 
       filename = []
@@ -246,18 +271,38 @@ class MxrFile < Mxr
         filename.push e.inner_html if e.inner_html != '/'
       end
 
-      write "File: #{color(getPath + filename.join('/'), Mxr::FILE)}\n"
+      filename = filename.join('/')
+      @files.push({ :file => filename, :line => 0})
+      write "File: #{showFileId}#{color(getPath + filename, Mxr::FILE)}\n"
     end
   end
 end
 
 # browse a single file
 class MxrBrowse < Mxr
+  def run
+    # a number
+    if @input.to_i.to_s == @input
+      file = @files[@input.to_i]
+      if file.nil?
+        write "FileId unknown\n"
+        return
+      end
+
+      @input = file[:file]
+      @line = file[:line].to_i
+    end
+
+    super
+  end
+
   def main
     @url = "https://mxr.mozilla.org/#{@tree}/source/#{@input}"
-    doc = getContent
+    getContent
+  end
 
-    doc.search('/html/body/pre').each do |pre|
+  def print
+    @doc.search('/html/body/pre').each do |pre|
       write showText(pre)
     end
   end
@@ -299,10 +344,10 @@ end
 
 # A simple shell:
 class MxrShell < Mxr
-  LIST = [ { :cmd => 'identifier', :class => MxrIdentifier },
-           { :cmd => 'search',     :class => MxrSearch     },
-           { :cmd => 'file',       :class => MxrFile       },
-           { :cmd => 'browse',     :class => MxrBrowse     } ]
+  LIST = [ { :cmd => 'identifier', :class => MxrIdentifier, :withFiles => false },
+           { :cmd => 'search',     :class => MxrSearch,     :withFiles => false },
+           { :cmd => 'file',       :class => MxrFile,       :withFiles => false },
+           { :cmd => 'browse',     :class => MxrBrowse,     :withFiles => true  } ]
 
   def run
     require 'readline'
@@ -320,23 +365,26 @@ class MxrShell < Mxr
 
       break if 'quit'.start_with? p[0]
 
-      cmd = nil
+      op = nil
       LIST.each do |c|
         if c[:cmd].start_with? p[0]
-          cmd = c[:class]
+          op = c
         end
       end
 
-      if cmd.nil?
+      if op.nil?
         puts p[0] + ': command not found'
       else
-        cmd = cmd.new
+        cmd = op[:class].new
         cmd.tree  = @tree
         cmd.path  = @path
         cmd.color = @color
         cmd.tool  = @tool
+        cmd.showFiles = true
+        cmd.files = @files if op[:withFiles]
         cmd.input = p[1]
         cmd.run
+        @files = cmd.files
       end
     end
   end
