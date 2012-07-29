@@ -19,27 +19,32 @@ How to install
   cd mxr
   sudo make
 
-I suggest to add these 4 lines in your ~/.bashrc:
+I suggest to add this line in your ~/.bashrc:
 
-  alias mxri='mxr -c -i'
-  alias mxrb='mxr -c -b'
-  alias mxrs='mxr -c -s'
-  alias mxrf='mxr -c -f'
+  alias mxr='mxr -c'
 
 How to use it
 -------------
 
-Usage: mxr [options]
+Usage: mxr [options] <operation> <something>
+
+Operations:
+- identifier <something>
+  Type the full name of an identifier (a function name, variable name, typedef, etc.) to summarize. Matches are case-sensitive.
+- search <something>
+  Free-text search through the source code, including comments.
+- file <something>
+  Search for files (by name) using regular expressions.
+- browse <something>
+  Show a file.
+
+Without any operation mxr starts in shell mode.
 
 Options:
-    -i, --identifier <something>     Type the full name of an identifier (a function name, variable name, typedef, etc.) to summarize. Matches are case-sensitive.
-    -s, --search <something>         Free-text search through the source code, including comments.
-    -f, --file <something>           Search for files (by name) using regular expressions.
-    -b, --browse <something>         Show a file.
-
-Common options:
     -l, --line <something>           Jump to this line.
-    -t, --tree <something>           Set a tree (default: mozilla-central).
+        --tree <something>           Set a tree (default: mozilla-central).
+    -t, --tool <tool>                The tool for showing the result. Default: less -FRSX
+    -T, --no-tool                    No external tool is used for showing the result.
     -p <local/path/for/the/repo>     The local path for the repository. This will be used to show the filenames.
         --path
     -c, --color                      Enable the ASCII colors.

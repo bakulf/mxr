@@ -23,6 +23,7 @@ OpenSSL::SSL::VERIFY_PEER = OpenSSL::SSL::VERIFY_NONE
 
 # the base class
 class Mxr
+
   RESULT = 'red'
   LINE   = 'green'
   FILE   = 'yellow'
@@ -47,20 +48,21 @@ class Mxr
   end
 
   def run
+    # the main operation
+    if main == false
+      puts "The network or the mxr website seem down."
+      return
+    end
+
     # no tool:
     if @tool.nil?
       @wr = $stdout
-      main
       print
       return
     end
 
-    # the main operation
-    main
-
     # with a tool
     rd, @wr = IO.pipe
-
     if Process.fork
       rd.close
 
@@ -146,9 +148,14 @@ protected
   def getContent
     doc = nil
     th = Thread.new do
-      doc = open(@url) do |f|
-        Hpricot(f)
+      begin
+        doc = open(@url) do |f|
+          Hpricot(f)
+        end
+      rescue
       end
+
+      doc = false
     end
 
     cursor = '|/-\\'
@@ -162,6 +169,8 @@ protected
 
     th.join
     @doc = doc
+
+    return (@doc != false)
   end
 
 private
@@ -185,7 +194,7 @@ end
 class MxrIdentifier < Mxr
   def main
     @url = "https://mxr.mozilla.org/#{@tree}/ident?i=#{CGI.escape(@input)}&tree=#{CGI.escape(@tree)}"
-    getContent
+    return getContent
   end
 
   def print
@@ -213,7 +222,7 @@ end
 class MxrSearch < Mxr
   def main
     @url = "https://mxr.mozilla.org/#{@tree}/search?string=#{CGI.escape(@input)}"
-    getContent
+    return getContent
   end
 
   def print
@@ -251,7 +260,7 @@ end
 class MxrFile < Mxr
   def main
     @url = "https://mxr.mozilla.org/#{@tree}/find?string=#{CGI.escape(@input)}"
-    getContent
+    return getContent
   end
 
   def print
@@ -285,7 +294,7 @@ class MxrBrowse < Mxr
     if @input.to_i.to_s == @input
       file = @files[@input.to_i]
       if file.nil?
-        write "FileId unknown\n"
+        puts "FileId unknown\n"
         return
       end
 
@@ -293,12 +302,22 @@ class MxrBrowse < Mxr
       @line = file[:line].to_i
     end
 
+    if @input.nil? or @input.empty?
+      puts "Nothing to show"
+      return
+    end
+
+    if not @input.include? '/'
+      puts "#{input} doesn't seem a full path."
+      return
+    end
+
     super
   end
 
   def main
     @url = "https://mxr.mozilla.org/#{@tree}/source/#{@input}"
-    getContent
+    return getContent
   end
 
   def print
@@ -344,16 +363,12 @@ end
 
 # A simple shell:
 class MxrShell < Mxr
-  LIST = [ { :cmd => 'identifier', :class => MxrIdentifier, :withFiles => false },
-           { :cmd => 'search',     :class => MxrSearch,     :withFiles => false },
-           { :cmd => 'file',       :class => MxrFile,       :withFiles => false },
-           { :cmd => 'browse',     :class => MxrBrowse,     :withFiles => true  } ]
 
   def run
     require 'readline'
 
     cmds = []
-    LIST.each do |c| cmds.push c[:cmd] end
+    Mxr::LIST.each do |c| cmds.push c[:cmd] end
     comp = proc { |s| cmds.grep( /^#{Regexp.escape(s)}/ ) }
 
     Readline.completion_append_character = " "
@@ -366,14 +381,14 @@ class MxrShell < Mxr
       break if 'quit'.start_with? p[0]
 
       op = nil
-      LIST.each do |c|
+      Mxr::LIST.each do |c|
         if c[:cmd].start_with? p[0]
           op = c
         end
       end
 
       if op.nil?
-        puts p[0] + ': command not found'
+        puts "#{p[0]}: command not found"
       else
         cmd = op[:class].new
         cmd.tree  = @tree
@@ -390,40 +405,34 @@ class MxrShell < Mxr
   end
 end
 
+# a description of what this app can do:
+class Mxr
+  LIST = [ { :cmd => 'identifier', :class => MxrIdentifier, :withFiles => false },
+           { :cmd => 'search',     :class => MxrSearch,     :withFiles => false },
+           { :cmd => 'file',       :class => MxrFile,       :withFiles => false },
+           { :cmd => 'browse',     :class => MxrBrowse,     :withFiles => true  } ]
+end
+
 options = {}
 opts = OptionParser.new do |opts|
-  opts.banner = "Usage: mxr [options]"
+  opts.banner = "Usage: mxr [options] <operation> <something>"
   opts.version = '0.1'
 
   opts.separator ""
-  opts.separator "Options:"
-
-  options[:identifier] = nil
-  opts.on('-i', '--identifier <something>',
-          'Type the full name of an identifier (a function name, variable name, typedef, etc.) to summarize. Matches are case-sensitive.') do |something|
-    options[:identifier] = something
-  end
-
-  options[:search] = nil
-  opts.on('-s', '--search <something>',
-          'Free-text search through the source code, including comments.') do |something|
-    options[:search] = something
-  end
-
-  options[:file] = nil
-  opts.on('-f', '--file <something>',
-          'Search for files (by name) using regular expressions.') do |something|
-    options[:file] = something
-  end
-
-  options[:browse] = nil
-  opts.on('-b', '--browse <something>',
-          'Show a file.') do |something|
-    options[:browse] = something
-  end
+  opts.separator "Operations:"
+  opts.separator "- identifier <something>" 
+  opts.separator "  Type the full name of an identifier (a function name, variable name, typedef, etc.) to summarize. Matches are case-sensitive."
+  opts.separator "- search <something>" 
+  opts.separator "  Free-text search through the source code, including comments."
+  opts.separator "- file <something>" 
+  opts.separator "  Search for files (by name) using regular expressions."
+  opts.separator "- browse <something>" 
+  opts.separator "  Show a file."
 
   opts.separator ""
-  opts.separator "Common options:"
+  opts.separator "Without any operation mxr starts in shell mode."
+  opts.separator ""
+  opts.separator "Options:"
 
   options[:line] = 0
   opts.on('-l', '--line <something>',
@@ -479,26 +488,34 @@ rescue
   exit
 end
 
-# Let's decide what we want to do:
 task = nil
-if not options[:identifier].nil?
-  task = MxrIdentifier.new
-  task.input = options[:identifier]
 
-elsif not options[:search].nil?
-  task = MxrSearch.new
-  task.input = options[:search]
+# 2 arguments: good - single operation
+if ARGV.length == 2
+  op = nil
+  Mxr::LIST.each do |c|
+    if c[:cmd].start_with? ARGV[0]
+      op = c
+      break
+    end
+  end
 
-elsif not options[:file].nil?
-  task = MxrFile.new
-  task.input = options[:file]
+  if op.nil?
+    puts opts
+    exit
+  end
 
-elsif not options[:browse].nil?
-  task = MxrBrowse.new
-  task.input = options[:browse]
+  task = op[:class].new
+  task.input = ARGV[1]
 
-else
+# no arguments: good - shell
+elsif ARGV.empty?
   task = MxrShell.new
+
+# error
+else
+  puts opts
+  exit
 end
 
 task.tree = options[:tree]
