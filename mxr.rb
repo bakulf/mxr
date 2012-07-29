@@ -26,7 +26,6 @@ class Mxr
   RESULT = 'red'
   LINE   = 'green'
   FILE   = 'yellow'
-  CMD    = 'cyan'
   PAGER  = 'less -FRSX'
 
   DEFAULT_TREE = 'mozilla-central'
@@ -107,7 +106,6 @@ protected
   # horrible MXR html parser:
   def show(filename, ul)
     write "\nFile: #{color(getPath + filename, Mxr::FILE)}\n"
-    write "Browse: #{color("mxr -b " + filename + cmdParams(true), Mxr::CMD)}\n"
 
     return unless ul.children.is_a? Array
     ul.children.each do |info|
@@ -145,15 +143,6 @@ protected
     end
 
     doc
-  end
-
-  # List of params for the Browse:
-  def cmdParams(line = false)
-    params=[]
-    params.push '-c' if @color
-    params.push "-t #{Shellwords.escape(@tree)}" unless @tree.nil? or @tree == Mxr::DEFAULT_TREE
-    params.push "-l <line>" if line == true
-    return " #{params.join(' ')}"
   end
 
 private
@@ -258,7 +247,6 @@ class MxrFile < Mxr
       end
 
       write "File: #{color(getPath + filename.join('/'), Mxr::FILE)}\n"
-      write "Browse: #{color("mxr -b " + filename.join('/') + cmdParams, Mxr::CMD)}\n\n"
     end
   end
 end
