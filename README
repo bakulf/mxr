@@ -12,6 +12,9 @@ or
 Url: https://github.com/defunkt/colored
 gem install colored
 
+*JSON*
+gem install json
+
 How to install
 --------------
 
@@ -19,12 +22,14 @@ How to install
   cd mxr
   sudo make
 
-I suggest to add this line in your ~/.bashrc:
+I suggest to add this line in ~/.bashrc:
 
   alias mxr='mxr -c'
+  alias try='try -c'
+  alias tryme='try -e <yourEmailAddress>'
 
-How to use it
--------------
+How to use mxr
+--------------
 
 Usage: mxr [options] <operation> <something>
 
@@ -38,7 +43,7 @@ Operations:
 - browse <something>
   Show a file.
 
-Without any operation mxr starts in shell mode.
+Without any operation, mxr starts in shell mode.
 
 Options:
     -l, --line <something>           Jump to this line.
@@ -49,5 +54,18 @@ Options:
         --path
     -c, --color                      Enable the ASCII colors.
     -h, --help                       Display this screen.
+
+BSD license - Andrea Marchesini <baku@ippolita.net>
+
+How to use try
+--------------
+
+Usage: try [options]
+
+Options:
+    -n, --number <number>            Show #pushes
+    -M, --maxRequests <maxRequests>  Max number of requests. (Default: 20)
+    -e, --email <emailAddress>       Set the email to be shown
+    -c, --color                      Enable the ASCII colors.
 
 BSD license - Andrea Marchesini <baku@ippolita.net>
