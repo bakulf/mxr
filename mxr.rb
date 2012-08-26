@@ -369,17 +369,58 @@ class MxrShell < Mxr
 
     cmds = []
     Mxr::LIST.each do |c| cmds.push c[:cmd] end
+    cmds += [ 'help', 'quit' ]
     comp = proc { |s| cmds.grep( /^#{Regexp.escape(s)}/ ) }
 
     Readline.completion_append_character = " "
     Readline.completion_proc = comp
 
+    history_p = []
+    history_n = []
+
     while line = Readline.readline('mxr> ', true)
       p = line.split
       next if p.empty?
 
+      # quit:
       break if 'quit'.start_with? p[0]
 
+      # prev:
+      pn = false
+      if 'prev'.start_with? p[0]
+        if history_p.empty?
+          puts "No prev command"
+          next
+        end
+
+        p = history_p.pop
+        history_n.push p
+        pn = true
+      end
+
+      # next
+      if 'next'.start_with? p[0]
+        if history_n.empty?
+          puts "No next command"
+          next
+        end
+
+        p = history_n.pop
+        history_p.push p
+        pn = true
+      end
+
+      if 'help'.start_with? p[0]
+        if pn == false
+          history_n = []
+          history_p.push p
+        end
+
+        help
+        next
+      end
+
+      # check the command:
       op = nil
       Mxr::LIST.each do |c|
         if c[:cmd].start_with? p[0]
@@ -390,6 +431,12 @@ class MxrShell < Mxr
       if op.nil?
         puts "#{p[0]}: command not found"
       else
+        # history: prev/next
+        if pn == false
+          history_n = []
+          history_p.push p
+        end
+
         cmd = op[:class].new
         cmd.tree  = @tree
         cmd.path  = @path
@@ -402,6 +449,37 @@ class MxrShell < Mxr
         @files = cmd.files
       end
     end
+  end
+
+  def help
+    puts "#{color('identifier')} <something>"
+    puts "  Type the full name of an identifier (a function name, variable name, typedef, etc.) to summarize. Matches are case-sensitive."
+    puts "#{color('search')} <something>"
+    puts "  Free-text search through the source code, including comments."
+    puts "#{color('file')} <something>"
+    puts "  Search for files (by name) using regular expressions."
+    puts "#{color('browse')} <something>"
+    puts "  Show a file."
+    puts "#{color('prev')}"
+    puts "  Exec the previous command."
+    puts "#{color('next')}"
+    puts "  Exec the following command if 'prev' has been used."
+    puts "#{color('quit')}"
+    puts "  Close this shell."
+    puts "#{color('help')}"
+    puts "  Show this help."
+  end
+
+  def color(str)
+   if @color == true
+     # just for fun:
+     colors = Colored::COLORS.keys.dup
+     colors.delete 'black'
+
+     str = super str, colors.shuffle[0]
+   else
+     str
+   end
   end
 end
 
@@ -420,13 +498,13 @@ opts = OptionParser.new do |opts|
 
   opts.separator ""
   opts.separator "Operations:"
-  opts.separator "- identifier <something>" 
+  opts.separator "- identifier <something>"
   opts.separator "  Type the full name of an identifier (a function name, variable name, typedef, etc.) to summarize. Matches are case-sensitive."
-  opts.separator "- search <something>" 
+  opts.separator "- search <something>"
   opts.separator "  Free-text search through the source code, including comments."
-  opts.separator "- file <something>" 
+  opts.separator "- file <something>"
   opts.separator "  Search for files (by name) using regular expressions."
-  opts.separator "- browse <something>" 
+  opts.separator "- browse <something>"
   opts.separator "  Show a file."
 
   opts.separator ""
