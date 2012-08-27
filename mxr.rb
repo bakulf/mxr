@@ -376,6 +376,7 @@ class MxrShell < Mxr
     Readline.completion_proc = comp
 
     history_p = []
+    history_c = nil
     history_n = []
 
     while line = Readline.readline('mxr> ', true)
@@ -394,7 +395,8 @@ class MxrShell < Mxr
         end
 
         p = history_p.pop
-        history_n.push p
+        history_n.push history_c if not history_c.nil?
+        history_c = p
         pn = true
       end
 
@@ -406,14 +408,16 @@ class MxrShell < Mxr
         end
 
         p = history_n.pop
-        history_p.push p
+        history_p.push history_c if not history_c.nil?
+        history_c = p
         pn = true
       end
 
       if 'help'.start_with? p[0]
         if pn == false
           history_n = []
-          history_p.push p
+          history_p.push history_c if not history_c.nil?
+          history_c = p
         end
 
         help
@@ -434,7 +438,8 @@ class MxrShell < Mxr
         # history: prev/next
         if pn == false
           history_n = []
-          history_p.push p
+          history_p.push history_c if not history_c.nil?
+          history_c = p
         end
 
         cmd = op[:class].new
