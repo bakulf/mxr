@@ -50,7 +50,6 @@ class Mxr
   def run
     # the main operation
     if main == false
-      puts "The network or the mxr website seem down."
       return
     end
 
@@ -165,7 +164,12 @@ protected
     th.join
     @doc = doc
 
-    return (@doc != false)
+    if @doc == false
+      puts "The network or the mxr website seem down."
+      return false
+    end
+
+    return true
   end
 
 private
@@ -188,6 +192,11 @@ end
 # identifier
 class MxrIdentifier < Mxr
   def main
+    if @input.nil?
+      puts "No input, no party"
+      return false
+    end
+
     @url = "https://mxr.mozilla.org/#{@tree}/ident?i=#{CGI.escape(@input)}&tree=#{CGI.escape(@tree)}"
     return getContent
   end
@@ -216,6 +225,11 @@ end
 # full-text search
 class MxrSearch < Mxr
   def main
+    if @input.nil?
+      puts "No input, no party"
+      return false
+    end
+
     @url = "https://mxr.mozilla.org/#{@tree}/search?string=#{CGI.escape(@input)}"
     return getContent
   end
@@ -254,6 +268,11 @@ end
 # filenames
 class MxrFile < Mxr
   def main
+    if @input.nil?
+      puts "No input, no party"
+      return false
+    end
+
     @url = "https://mxr.mozilla.org/#{@tree}/find?string=#{CGI.escape(@input)}"
     return getContent
   end
@@ -311,6 +330,11 @@ class MxrBrowse < Mxr
   end
 
   def main
+    if @input.nil?
+      puts "No input, no party"
+      return false
+    end
+
     @url = "https://mxr.mozilla.org/#{@tree}/source/#{@input}"
     return getContent
   end
@@ -380,7 +404,7 @@ class MxrShell < Mxr
     history_n = []
 
     while line = Readline.readline('mxr> ', true)
-      p = line.split
+      p = Shellwords::shellwords line
       next if p.empty?
 
       # quit:
