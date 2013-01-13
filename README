@@ -1,7 +1,18 @@
+What is this about?!?
+---------------------
+
+bxr.rb - this is a cross reference designed to display the Mozilla source code
+         in command line mode using a local database (sqlite3).
+         This tool is meant to be used alone or with vim.
+
+mxr.rb - a tool for having mxr.mozilla.org in command line mode.
+
+try.rb - a simple viewer for tbpl.mozilla.com in command line mode.
+
 Requirements
 ------------
 
-*hpricot*
+*hpricot* (only for mxr.rb)
 Url: https://github.com/hpricot/hpricot
 
   gem install hpricot
@@ -12,8 +23,12 @@ or
 Url: https://github.com/defunkt/colored
 gem install colored
 
-*JSON*
+*JSON* (only for try.rb)
 gem install json
+
+*Sqlite3* (only for bxr.rb)
+gem install sqlite3
+
 
 How to install
 --------------
@@ -24,9 +39,40 @@ How to install
 
 I suggest to add this line in ~/.bashrc:
 
+  alias bxr='bxr -c'
   alias mxr='mxr -c'
   alias try='try -c'
   alias tryme='try -e <yourEmailAddress>'
+
+How to use bxr
+--------------
+
+Usage: bxr [options] <operation> <something>
+
+Operations:
+- create <path>
+  Scan a path and create the index file .bxr.db
+- identifier <something>
+  Type the full name of an identifier (a function name, variable name, typedef, etc.) to summarize. Matches are case-sensitive.
+- search <something>
+  Free-text search through the source code, including comments.
+- file <something>
+  Search for files (by name) using regular expressions.
+
+Options:
+    -l, --line <something>           Jump to this line.
+    -t, --tool <tool>                The tool for showing the result. Default: less -FRSX
+    -T, --no-tool                    No external tool is used for showing the result.
+    -c, --color                      Enable the ASCII colors.
+    -V, --vi                         VIm output.
+    -h, --help                       Display this screen.
+
+BSD license - Andrea Marchesini <baku@ippolita.net>
+
+How to use bxr with vim
+-----------------------
+
+Copy bxr.vim into ~/.vim/plugin/
 
 How to use mxr
 --------------
