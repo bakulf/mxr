@@ -53,13 +53,14 @@ Operations:
 - create <path>
   Scan a path and create the index file .bxr.db
 - identifier <something>
-  Type the full name of an identifier (a function name, variable name, typedef, etc.) to summarize. Matches are case-sensitive.
+  Type the full name of an identifier (a function name, variable name, typedef, etc.) to summarize.
 - search <something>
-  Free-text search through the source code, including comments.
+  Search through the source code.
 - file <something>
-  Search for files (by name) using regular expressions.
+  Search for files (by name).
 
 Options:
+    -m, --max <something>            Set a max number of results shown.
     -l, --line <something>           Jump to this line.
     -t, --tool <tool>                The tool for showing the result. Default: less -FRSX
     -T, --no-tool                    No external tool is used for showing the result.
