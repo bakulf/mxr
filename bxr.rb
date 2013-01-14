@@ -26,11 +26,14 @@ class Bxr
 
   DB_FILE = '.bxr.db'
 
+  MIN_LEN = 5
+
   attr_accessor :input
   attr_accessor :retro
   attr_accessor :color
   attr_accessor :vimode
   attr_accessor :line
+  attr_accessor :max
   attr_accessor :tool
   attr_accessor :db
 
@@ -99,13 +102,18 @@ protected
   end
 
   def show(title, data)
+    results = 0
+
     if @vimode == true
       data.each do |row|
         write "#{filepath(row[0])}:#{row[1]}:"
         if row[2] != -1
           write "#{row[2]}:"
         end
-        write "#{row[3]}"
+        write showline(row[0], row[1])
+
+        results += 1
+        break if @max.is_a? Fixnum and @max != 0 and results >= @max
       end
     else
       write "#{title}\n"
@@ -116,10 +124,24 @@ protected
         write "\nFile: #{color(row[0], Bxr::FILE)}\n" if prev != row[0]
         write "Line: #{color(row[1].to_s, Bxr::LINE)}"
         write " -> "
-        write row[3]
+        write showline row[0], row[1]
 
         prev = row[0]
+
+        results += 1
+        break if @max.is_a? Fixnum and @max != 0 and results >= @max
       end
+    end
+  end
+
+  def showline(path, linenumber)
+    File.open path, 'r' do |f|
+      while not f.eof? do
+        linenumber -= 1
+        line = f.readline
+        return line if linenumber == 0
+      end
+      "\n"
     end
   end
 
@@ -140,6 +162,29 @@ protected
 
     str
   end
+
+  def readtags(line)
+    tags = []
+    tag = []
+
+    cn = 0
+    line.each_char do |c|
+      cn += 1
+      if (c >= 'a' and c <= 'z') or
+         (c >= 'A' and c <= 'Z') or
+         (c >= '0' and c <= '9') or
+         c == '_'
+        tag.push c
+      elsif not tag.empty?
+        if tag.length >= MIN_LEN and not tag[0].is_number?
+          tags.push({ :tag => tag.join, :column => cn - tag.length})
+        end
+        tag = []
+      end
+    end
+    return tags
+  end
+
 end
 
 # scan
@@ -147,7 +192,6 @@ class BxrScan < Bxr
   EXTENSIONS = [ '.c', '.cc', '.cpp', '.cxx', '.h', '.hh', '.hpp',
                  '.idl', '.ipdl', '.java', '.js', 'jsm', '.perl', '.php', '.py',
                  '.rb', '.rc', '.sh', '.webidl', '.xml', '.html', '.xul' ]
-  MIN_LEN = 4
 
   def run
     if @input.nil?
@@ -167,22 +211,24 @@ class BxrScan < Bxr
     end
 
     @db = SQLite3::Database.new Bxr::DB_FILE
-    @db.execute "CREATE TABLE Tags ( " +
-                "  tag      VARCHAR, " +
+    @db.execute "CREATE TABLE Bxr ( " +
+                "  tag      INTEGER, " +
                 "  file     INTEGER, " +
                 "  column   INTEGER, " +
+                "  line     INTEGER, " +
                 "  priority INTEGER  " +
                 ")"
-    @db.execute "CREATE TABLE Files ( "  +
-                "  path       VARCHAR, " +
-                "  filename   VARCHAR, " +
-                "  linenumber INTEGER, " +
-                "  line       VARCHAR " +
+    @db.execute "CREATE TABLE Tags ( " +
+                "  tag      VARCHAR  " +
                 ")"
+    @db.execute "CREATE TABLE Files ( " +
+                "  path     VARCHAR,  " +
+                "  filename VARCHAR   " +
+                ")"
+    @db.execute "CREATE INDEX BxrIndex ON Bxr (tag)"
     @db.execute "CREATE INDEX TagsIndex ON Tags (tag)"
-    @db.execute "CREATE INDEX PriorityIndex ON Tags (priority)"
+    @db.execute "CREATE INDEX PriorityIndex ON Bxr (priority)"
     @db.execute "CREATE INDEX FilesIndex ON Files (filename)"
-    @db.execute "CREATE INDEX LinesIndex ON Files (line)"
 
     @db.transaction do
       scan '.'
@@ -208,6 +254,7 @@ class BxrScan < Bxr
     puts "Scanning: #{color(path, 'yellow')}"
 
     ln = 0
+    id = 0
     basename = File.basename path
 
     File.open path, 'r' do |f|
@@ -216,38 +263,28 @@ class BxrScan < Bxr
         line = f.readline
         tags = readtags line
         next if tags.empty?
-        @db.execute "INSERT INTO Files VALUES(?,?,?,?)",
-                     path, basename, ln, line
-        id = @db.last_insert_row_id
+
+        if id == 0
+          @db.execute "INSERT INTO Files VALUES(?,?)",
+                       path, basename
+          id = @db.last_insert_row_id
+        end
 
         tags.each do |tag|
-          @db.execute "INSERT INTO Tags VALUES(?,?,?,?)",
-                      tag[:tag], id, tag[:column], priority(tag, line, basename)
+          tagId = nil
+          @db.execute "SELECT ROWID FROM Tags WHERE tag = ?", tag[:tag] do |row|
+            tagId = row[0]
+          end
+          if tagId.nil?
+            @db.execute "INSERT INTO Tags VALUES(?)", tag[:tag]
+            tagId = @db.last_insert_row_id
+          end
+
+          @db.execute "INSERT INTO Bxr VALUES(?,?,?,?,?)",
+                      tagId, id, tag[:column], ln, priority(tag, line, basename)
         end
       end
     end
-  end
-
-  def readtags(line)
-    tags = []
-    tag = []
-
-    cn = 0
-    line.each_char do |c|
-      cn += 1
-      if (c >= 'a' and c <= 'z') or
-         (c >= 'A' and c <= 'Z') or
-         (c >= '0' and c <= '9') or
-         c == '_'
-        tag.push c
-      elsif not tag.empty?
-        if tag.length >= MIN_LEN and not tag[0].is_number?
-          tags.push({ :tag => tag.join, :column => cn - tag.length})
-        end
-        tag = []
-      end
-    end
-    return tags
   end
 
   P_IDL_HIGH   = 5
@@ -297,10 +334,10 @@ class BxrIdentifier < Bxr
     openDb
 
     data = []
-    @db.execute "SELECT Files.path, Files.linenumber, Tags.column, Files.line " +
-                "FROM Files, Tags " +
-                "WHERE Tags.tag=? AND Tags.file = Files.ROWID " +
-                "ORDER BY Tags.priority DESC", @input do |row|
+    @db.execute "SELECT Files.path, Bxr.line, Bxr.column " +
+                "FROM Bxr, Tags, Files " +
+                "WHERE Tags.tag = ? AND Bxr.file = Files.ROWID AND Bxr.tag = Tags.ROWID " +
+                "ORDER BY Bxr.priority DESC", @input do |row|
       data.push row
     end
 
@@ -317,11 +354,15 @@ class BxrSearch < Bxr
 
     openDb
 
+    tags = readtags @input + " "
+
     data = []
-    @db.execute "SELECT Files.path, Files.linenumber, -1, Files.line " +
-                "FROM Files " +
-                "WHERE Files.line like ?", "%#{@input}%" do |row|
-      data.push row
+
+    if not tags.empty?
+      @db.execute "SELECT Files.path, Bxr.line FROM Bxr, Tags, Files " +
+                  "WHERE Tags.tag like ? AND Bxr.tag = Tags.ROWID AND Bxr.file = Files.ROWID", "%#{tags[0][:tag]}%" do |row|
+        data.push row if showline(row[0], row[1]).include? @input
+      end
     end
 
     show "Result for: #{color(@input, Bxr::RESULT, true)}", data
@@ -340,8 +381,8 @@ class BxrFile < Bxr
 
     data = []
     @db.execute "SELECT DISTINCT filename FROM Files " +
-                "WHERE Files.filename like ? " +
-                "ORDER BY Files.filename", "%#{@input}%" do |row|
+                "WHERE filename like ? " +
+                "ORDER BY filename", "%#{@input}%" do |row|
       data.push row
     end
 
@@ -388,6 +429,12 @@ opts = OptionParser.new do |opts|
 
   opts.separator ""
   opts.separator "Options:"
+
+  options[:max] = 0
+  opts.on('-m', '--max <something>',
+          'Set a max number of results shown.') do |something|
+    options[:max] = something.to_i
+  end
 
   options[:line] = 0
   opts.on('-l', '--line <something>',
@@ -471,6 +518,7 @@ end
 
 task.color  = options[:color]
 task.vimode = options[:vi]
+task.max    = options[:max]
 task.line   = options[:line]
 task.tool   = options[:tool]
 

@@ -3,7 +3,7 @@
 
 " Location of the bxr utility
 if !exists("g:bxrprg")
-    let g:bxrprg="bxr -V "
+    let g:bxrprg="bxr -V -m 100 "
 endif
 
 if !exists("g:bxr_qhandler")
@@ -38,7 +38,7 @@ function! s:bxr(cmd, task, format, args)
     try
         let &grepprg=g:bxrprg
         let &grepformat=a:format
-        execute a:cmd . " " . a:task . " " . escape(l:grepargs, '|')
+        silent execute a:cmd . " " . a:task . " " . escape(l:grepargs, '|')
     finally
         let &grepprg=grepprg_bak
         let &grepformat=grepformat_bak
