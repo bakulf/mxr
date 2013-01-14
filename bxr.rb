@@ -28,7 +28,7 @@ class Bxr
 
   MIN_LEN = 5
 
-  attr_accessor :input
+  attr_accessor :inputs
   attr_accessor :retro
   attr_accessor :color
   attr_accessor :vimode
@@ -36,9 +36,6 @@ class Bxr
   attr_accessor :max
   attr_accessor :tool
   attr_accessor :db
-
-  def initialize
-  end
 
   def run
 
@@ -78,6 +75,11 @@ protected
     while true do
       if File.exist? Bxr::DB_FILE
         @db = SQLite3::Database.new Bxr::DB_FILE
+
+        link = @db.execute "SELECT path FROM BxrLink" rescue nil
+        return if link.nil? or link.empty?
+
+        @db = SQLite3::Database.new link[0][0] + '/' + Bxr::DB_FILE
         return
       end
 
@@ -194,15 +196,22 @@ class BxrScan < Bxr
                  '.rb', '.rc', '.sh', '.webidl', '.xml', '.html', '.xul' ]
 
   def run
-    if @input.nil?
-      puts "No input, no party"
+    if @inputs.length < 1 or @inputs.length > 2
+      puts "Usage: <path> [<dbPath>]"
       return false
     end
 
+    path = File.expand_path @inputs[0]
+    dbPath = path
+
+    if @inputs.length == 2
+      dbPath = File.expand_path @inputs[1]
+    end
+
     begin
-      Dir.chdir(@input)
+      Dir.chdir(dbPath)
     rescue
-      puts "Chdir failed with `#{@input}'."
+      puts "Chdir failed with `#{path}'."
       exit
     end
 
@@ -230,9 +239,27 @@ class BxrScan < Bxr
     @db.execute "CREATE INDEX PriorityIndex ON Bxr (priority)"
     @db.execute "CREATE INDEX FilesIndex ON Files (filename)"
 
+    begin
+      Dir.chdir(path)
+    rescue
+      puts "Chdir failed with `#{path}'."
+      exit
+    end
+
+    if path != dbPath
+      if File.exist? Bxr::DB_FILE
+        File.unlink Bxr::DB_FILE
+      end
+
+      db = SQLite3::Database.new Bxr::DB_FILE
+      db.execute "CREATE TABLE BxrLink ( path VARCHAR )"
+      db.execute "INSERT INTO BxrLink VALUES ( ? )", dbPath
+    end
+
     @db.transaction do
       scan '.'
     end
+
   end
 
   def scan(path)
@@ -326,8 +353,8 @@ end
 # identifier
 class BxrIdentifier < Bxr
   def task
-    if @input.nil?
-      puts "No input, no party"
+    if @inputs.length != 1
+      puts "One and Just one argument is needed."
       return false
     end
 
@@ -337,43 +364,43 @@ class BxrIdentifier < Bxr
     @db.execute "SELECT Files.path, Bxr.line, Bxr.column " +
                 "FROM Bxr, Tags, Files " +
                 "WHERE Tags.tag = ? AND Bxr.file = Files.ROWID AND Bxr.tag = Tags.ROWID " +
-                "ORDER BY Bxr.priority DESC", @input do |row|
+                "ORDER BY Bxr.priority DESC", @inputs[0] do |row|
       data.push row
     end
 
-    show "Result for: #{color(@input, Bxr::RESULT, true)}", data
+    show "Result for: #{color(@inputs[0], Bxr::RESULT, true)}", data
   end
 end
 
 class BxrSearch < Bxr
   def task
-    if @input.nil?
-      puts "No input, no party"
+    if @inputs.length != 1
+      puts "One and Just one argument is needed."
       return false
     end
 
     openDb
 
-    tags = readtags @input + " "
+    tags = readtags @inputs[0] + " "
 
     data = []
 
     if not tags.empty?
       @db.execute "SELECT Files.path, Bxr.line FROM Bxr, Tags, Files " +
                   "WHERE Tags.tag like ? AND Bxr.tag = Tags.ROWID AND Bxr.file = Files.ROWID", "%#{tags[0][:tag]}%" do |row|
-        data.push row if showline(row[0], row[1]).include? @input
+        data.push row if showline(row[0], row[1]).include? @inputs[0]
       end
     end
 
-    show "Result for: #{color(@input, Bxr::RESULT, true)}", data
+    show "Result for: #{color(@inputs[0], Bxr::RESULT, true)}", data
   end
 end
 
 # filenames
 class BxrFile < Bxr
   def task
-    if @input.nil?
-      puts "No input, no party"
+    if @inputs.length != 1
+      puts "One and Just one argument is needed."
       return false
     end
 
@@ -382,11 +409,11 @@ class BxrFile < Bxr
     data = []
     @db.execute "SELECT DISTINCT filename FROM Files " +
                 "WHERE filename like ? " +
-                "ORDER BY filename", "%#{@input}%" do |row|
+                "ORDER BY filename", "%#{@inputs[0]}%" do |row|
       data.push row
     end
 
-    show "Result for: #{color(@input, Bxr::RESULT, true)}", data
+    show "Result for: #{color(@inputs[0], Bxr::RESULT, true)}", data
   end
 
   def show(title, data)
@@ -493,28 +520,22 @@ end
 task = nil
 
 # task selection
-if ARGV.length == 2
-  op = nil
-  Bxr::LIST.each do |c|
-    if c[:cmd].start_with? ARGV[0]
-      op = c
-      break
-    end
+op = nil
+Bxr::LIST.each do |c|
+  if c[:cmd].start_with? ARGV[0]
+    op = c
+    break
   end
+end
 
-  if op.nil?
-    puts opts
-    exit
-  end
-
-  task = op[:class].new
-  task.input = ARGV[1]
-
-# error
-else
+if op.nil?
   puts opts
   exit
 end
+
+task = op[:class].new
+ARGV.shift
+task.inputs = ARGV
 
 task.color  = options[:color]
 task.vimode = options[:vi]
