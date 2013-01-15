@@ -103,7 +103,7 @@ protected
     return path + filename
   end
 
-  def show(title, data)
+  def show(title, data, what)
     results = 0
 
     if @vimode == true
@@ -112,7 +112,7 @@ protected
         if row[2] != -1
           write "#{row[2]}:"
         end
-        write showline(row[0], row[1])
+        write showline(row[0], row[1], what)
 
         results += 1
         break if @max.is_a? Fixnum and @max != 0 and results >= @max
@@ -126,7 +126,7 @@ protected
         write "\nFile: #{color(row[0], Bxr::FILE)}\n" if prev != row[0]
         write "Line: #{color(row[1].to_s, Bxr::LINE)}"
         write " -> "
-        write showline row[0], row[1]
+        write showline row[0], row[1], what
 
         prev = row[0]
 
@@ -136,14 +136,29 @@ protected
     end
   end
 
-  def showline(path, linenumber)
+  def showline(path, linenumber, what)
+    ret = nil
     File.open path, 'r' do |f|
       while not f.eof? do
         linenumber -= 1
         line = f.readline
-        return line if linenumber == 0
+        if linenumber == 0
+          ret = line
+          break
+        end
       end
-      "\n"
+
+      if not what.nil? and
+         not ret.nil? and
+         not ret.include? what
+        ret = nil
+      end
+
+      if ret.nil?
+        return "code and bxr out of date\n"
+      end
+
+      return ret
     end
   end
 
@@ -368,7 +383,7 @@ class BxrIdentifier < Bxr
       data.push row
     end
 
-    show "Result for: #{color(@inputs[0], Bxr::RESULT, true)}", data
+    show "Result for: #{color(@inputs[0], Bxr::RESULT, true)}", data, @inputs[0]
   end
 end
 
@@ -388,11 +403,11 @@ class BxrSearch < Bxr
     if not tags.empty?
       @db.execute "SELECT Files.path, Bxr.line FROM Bxr, Tags, Files " +
                   "WHERE Tags.tag like ? AND Bxr.tag = Tags.ROWID AND Bxr.file = Files.ROWID", "%#{tags[0][:tag]}%" do |row|
-        data.push row if showline(row[0], row[1]).include? @inputs[0]
+        data.push row if showline(row[0], row[1], nil).include? @inputs[0]
       end
     end
 
-    show "Result for: #{color(@inputs[0], Bxr::RESULT, true)}", data
+    show "Result for: #{color(@inputs[0], Bxr::RESULT, true)}", data, @inputs[0]
   end
 end
 
@@ -413,10 +428,10 @@ class BxrFile < Bxr
       data.push row
     end
 
-    show "Result for: #{color(@inputs[0], Bxr::RESULT, true)}", data
+    show "Result for: #{color(@inputs[0], Bxr::RESULT, true)}", data, @inputs[0]
   end
 
-  def show(title, data)
+  def show(title, data, what)
     if @vimode == true
       data.each do |row|
         write "#{row[0]}\n"
