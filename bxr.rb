@@ -7,6 +7,7 @@
 require 'rubygems'
 require 'optparse'
 require 'sqlite3'
+require 'yaml'
 
 class String
   def is_number?
@@ -17,16 +18,17 @@ end
 # the base class
 class Bxr
 
-  RESULT  = 'red'
-  LINE    = 'green'
-  FILE    = 'yellow'
-  FILEID  = 'cyan'
+  RESULT    = 'red'
+  LINE      = 'green'
+  FILE      = 'yellow'
+  FILEID    = 'cyan'
 
-  PAGER   = 'less -FRSX'
+  PAGER     = 'less -FRSX'
 
-  DB_FILE = '.bxr.db'
+  DB_FILE   = '.bxr.db'
+  CONF_FILE = '.bxr.yml'
 
-  MIN_LEN = 5
+  MIN_LEN   = 5
 
   attr_accessor :inputs
   attr_accessor :retro
@@ -36,6 +38,7 @@ class Bxr
   attr_accessor :max
   attr_accessor :tool
   attr_accessor :db
+  attr_accessor :settings
 
   def run
 
@@ -73,13 +76,15 @@ protected
     @retro = 0
 
     while true do
-      if File.exist? Bxr::DB_FILE
-        @db = SQLite3::Database.new Bxr::DB_FILE
+      if File.exist? Bxr::CONF_FILE
+        config = YAML.load_file Bxr::CONF_FILE
+        if config == false or config.nil? or config['bxr'].nil?
+          puts "No configuration! Remove ~/.bterm.yml or fix it!"
+          exit
+        end
 
-        link = @db.execute "SELECT path FROM BxrLink" rescue nil
-        return if link.nil? or link.empty?
-
-        @db = SQLite3::Database.new link[0][0] + '/' + Bxr::DB_FILE
+        @settings = config['bxr']
+        @db = SQLite3::Database.new @settings['db']
         return
       end
 
@@ -138,28 +143,31 @@ protected
 
   def showline(path, linenumber, what)
     ret = nil
-    File.open path, 'r' do |f|
-      while not f.eof? do
-        linenumber -= 1
-        line = f.readline
-        if linenumber == 0
-          ret = line
-          break
+
+    if File.exist? path
+      File.open path, 'r' do |f|
+        while not f.eof? do
+          linenumber -= 1
+          line = f.readline
+          if linenumber == 0
+            ret = line
+            break
+          end
+        end
+
+        if not what.nil? and
+           not ret.nil? and
+           not ret.include? what
+          ret = nil
         end
       end
-
-      if not what.nil? and
-         not ret.nil? and
-         not ret.include? what
-        ret = nil
-      end
-
-      if ret.nil?
-        return "code and bxr out of date\n"
-      end
-
-      return ret
     end
+
+    if ret.nil?
+      return "code and bxr out of date\n"
+    end
+
+    return ret
   end
 
   # Write the output
@@ -181,22 +189,19 @@ protected
   end
 
   def readtags(line)
-    tags = []
-    tag = []
+    begin
+      parts = line.split(/([a-zA-Z0-9_]+)/)
+    rescue
+      return []
+    end
 
+    tags = []
     cn = 0
-    line.each_char do |c|
-      cn += 1
-      if (c >= 'a' and c <= 'z') or
-         (c >= 'A' and c <= 'Z') or
-         (c >= '0' and c <= '9') or
-         c == '_'
-        tag.push c
-      elsif not tag.empty?
-        if tag.length >= MIN_LEN and not tag[0].is_number?
-          tags.push({ :tag => tag.join, :column => cn - tag.length})
-        end
-        tag = []
+
+    parts.each_with_index do |tag, id|
+      cn += tag.length
+      if id.odd? and tag.length >= MIN_LEN and not tag[0].is_number?
+        tags.push({ :tag => tag, :column => cn - tag.length })
       end
     end
     return tags
@@ -211,30 +216,31 @@ class BxrScan < Bxr
                  '.rb', '.rc', '.sh', '.webidl', '.xml', '.html', '.xul' ]
 
   def run
-    if @inputs.length < 1 or @inputs.length > 2
-      puts "Usage: <path> [<dbPath>]"
+    if @inputs.length != 1
+      puts "Usage: <path>"
       return false
     end
 
     path = File.expand_path @inputs[0]
-    dbPath = path
 
-    if @inputs.length == 2
-      dbPath = File.expand_path @inputs[1]
+    if not File.exist? Bxr::CONF_FILE
+      file = File.open Bxr::CONF_FILE, 'w'
+      file.write "bxr:\n"
+      file.write "  db: " + Bxr::DB_FILE + "\n"
+      file.close
     end
 
-    begin
-      Dir.chdir(dbPath)
-    rescue
-      puts "Chdir failed with `#{path}'."
-      exit
+    config = YAML.load_file(Bxr::CONF_FILE)
+    if config == false or config.nil? or config['bxr'].nil?
+      puts "No configuration! Remove .bxr.yml or fix it!"
+      return false
     end
 
-    if File.exist? Bxr::DB_FILE
-      File.unlink Bxr::DB_FILE
+    if File.exist? config['bxr']['db']
+      File.unlink config['bxr']['db']
     end
 
-    @db = SQLite3::Database.new Bxr::DB_FILE
+    @db = SQLite3::Database.new config['bxr']['db']
     @db.execute "CREATE TABLE Bxr ( " +
                 "  tag      INTEGER, " +
                 "  file     INTEGER, " +
@@ -259,16 +265,6 @@ class BxrScan < Bxr
     rescue
       puts "Chdir failed with `#{path}'."
       exit
-    end
-
-    if path != dbPath
-      if File.exist? Bxr::DB_FILE
-        File.unlink Bxr::DB_FILE
-      end
-
-      db = SQLite3::Database.new Bxr::DB_FILE
-      db.execute "CREATE TABLE BxrLink ( path VARCHAR )"
-      db.execute "INSERT INTO BxrLink VALUES ( ? )", dbPath
     end
 
     @db.transaction do
@@ -296,35 +292,42 @@ class BxrScan < Bxr
     puts "Scanning: #{color(path, 'yellow')}"
 
     ln = 0
-    id = 0
     basename = File.basename path
 
-    File.open path, 'r' do |f|
-      while not f.eof? do
-        ln += 1
-        line = f.readline
-        tags = readtags line
-        next if tags.empty?
+    file_tags = {}
 
-        if id == 0
-          @db.execute "INSERT INTO Files VALUES(?,?)",
-                       path, basename
-          id = @db.last_insert_row_id
-        end
+    File.open(path, 'r').each_line do |line|
+      ln += 1
+      tags = readtags line
+      next if tags.empty?
 
-        tags.each do |tag|
-          tagId = nil
-          @db.execute "SELECT ROWID FROM Tags WHERE tag = ?", tag[:tag] do |row|
-            tagId = row[0]
-          end
-          if tagId.nil?
-            @db.execute "INSERT INTO Tags VALUES(?)", tag[:tag]
-            tagId = @db.last_insert_row_id
-          end
+      tags.each do |tag|
+        file_tags[tag] = [] if not file_tags.include? tag
 
-          @db.execute "INSERT INTO Bxr VALUES(?,?,?,?,?)",
-                      tagId, id, tag[:column], ln, priority(tag, line, basename)
-        end
+        file_tags[tag].push({ :column   => tag[:column],
+                              :ln       => ln,
+                              :priority => priority(tag, line, basename) })
+      end
+    end
+
+    id = 0
+    @db.execute "INSERT INTO Files VALUES(?,?)", path, basename
+    id = @db.last_insert_row_id
+
+    file_tags.each do |tag, data|
+      tagId = nil
+      @db.execute "SELECT ROWID FROM Tags WHERE tag = ?", tag[:tag] do |row|
+        tagId = row[0]
+      end
+
+      if tagId.nil?
+        @db.execute "INSERT INTO Tags VALUES(?)", tag[:tag]
+        tagId = @db.last_insert_row_id
+      end
+
+      data.each do |d|
+        @db.execute "INSERT INTO Bxr VALUES(?,?,?,?,?)",
+                     tagId, id, d[:column], d[:ln], d[:priority]
       end
     end
   end
@@ -334,6 +337,7 @@ class BxrScan < Bxr
   P_CLASS      = 3
   P_IMPL       = 2
   P_NORMAL     = 1
+  P_TEST       = 0
 
   def priority(tag, line, filename)
     extension = File.extname filename
@@ -351,7 +355,7 @@ class BxrScan < Bxr
     if [ '.c', '.cc', '.cpp', '.cxx', '.h', '.hh', '.hpp', '.java' ].include? extension
       return P_CLASS if line.include? 'class' and not line.include? ';'
       begin
-        return P_IMPL if line.downcase.include? "#{tag[:tag].downcase}::#{tag[:tag].downcase}"
+        return P_IMPL if line.downcase.include? "::#{tag[:tag].downcase}"
       rescue
       end
     end
@@ -359,6 +363,11 @@ class BxrScan < Bxr
     if [ '.js', '.jsm' ].include? extension
       return P_CLASS if line.include? 'prototype'
       return P_IMPL if line.include? 'function'
+    end
+
+    begin
+      return P_TEST if filename.downcase.include? 'test'
+    rescue
     end
 
     return P_NORMAL
@@ -461,7 +470,7 @@ opts = OptionParser.new do |opts|
   opts.separator ""
   opts.separator "Operations:"
   opts.separator "- create <path>"
-  opts.separator "  Scan a path and create the index file #{Bxr::DB_FILE}"
+  opts.separator "  Scan a path and create the index file #{Bxr::CONF_FILE}"
   opts.separator "- identifier <something>"
   opts.separator "  Type the full name of an identifier (a function name, variable name, typedef, etc.) to summarize."
   opts.separator "- search <something>"

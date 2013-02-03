@@ -7,8 +7,6 @@ bxr.rb - this is a cross reference designed to display the Mozilla source code
 
 mxr.rb - a tool for having mxr.mozilla.org in command line mode.
 
-try.rb - a simple viewer for tbpl.mozilla.com in command line mode.
-
 Requirements
 ------------
 
@@ -22,9 +20,6 @@ or
 *colored* (optional)
 Url: https://github.com/defunkt/colored
 gem install colored
-
-*JSON* (only for try.rb)
-gem install json
 
 *Sqlite3* (only for bxr.rb)
 gem install sqlite3
@@ -41,8 +36,6 @@ I suggest to add this line in ~/.bashrc:
 
   alias bxr='bxr -c'
   alias mxr='mxr -c'
-  alias try='try -c'
-  alias tryme='try -e <yourEmailAddress>'
 
 How to use bxr
 --------------
@@ -51,7 +44,7 @@ Usage: bxr [options] <operation> <something>
 
 Operations:
 - create <path>
-  Scan a path and create the index file .bxr.db
+  Scan a path and create the index file .bxr.yml
 - identifier <something>
   Type the full name of an identifier (a function name, variable name, typedef, etc.) to summarize.
 - search <something>
@@ -69,6 +62,8 @@ Options:
     -h, --help                       Display this screen.
 
 BSD license - Andrea Marchesini <baku@ippolita.net>
+
+NOTE: .bxr.yml contains the path of the database file. The default is `.bxr.db'.
 
 How to use bxr with vim
 -----------------------
@@ -101,18 +96,5 @@ Options:
         --path
     -c, --color                      Enable the ASCII colors.
     -h, --help                       Display this screen.
-
-BSD license - Andrea Marchesini <baku@ippolita.net>
-
-How to use try
---------------
-
-Usage: try [options]
-
-Options:
-    -n, --number <number>            Show #pushes
-    -M, --maxRequests <maxRequests>  Max number of requests. (Default: 20)
-    -e, --email <emailAddress>       Set the email to be shown
-    -c, --color                      Enable the ASCII colors.
 
 BSD license - Andrea Marchesini <baku@ippolita.net>
