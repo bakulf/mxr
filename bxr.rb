@@ -218,7 +218,7 @@ class BxrScan < Bxr
   def run
     if @inputs.length != 1
       puts "Usage: <path>"
-      return false
+      return
     end
 
     path = File.expand_path @inputs[0]
@@ -233,7 +233,7 @@ class BxrScan < Bxr
     config = YAML.load_file(Bxr::CONF_FILE)
     if config == false or config.nil? or config['bxr'].nil?
       puts "No configuration! Remove .bxr.yml or fix it!"
-      return false
+      return
     end
 
     if File.exist? config['bxr']['db']
@@ -253,7 +253,8 @@ class BxrScan < Bxr
                 ")"
     @db.execute "CREATE TABLE Files ( " +
                 "  path     VARCHAR,  " +
-                "  filename VARCHAR   " +
+                "  filename VARCHAR,  " +
+                "  epoctime INTEGER   " +
                 ")"
     @db.execute "CREATE INDEX BxrIndex ON Bxr (tag)"
     @db.execute "CREATE INDEX TagsIndex ON Tags (tag)"
@@ -311,7 +312,7 @@ class BxrScan < Bxr
     end
 
     id = 0
-    @db.execute "INSERT INTO Files VALUES(?,?)", path, basename
+    @db.execute "INSERT INTO Files VALUES(?,?,?)", path, basename, File.mtime(path).to_i
     id = @db.last_insert_row_id
 
     file_tags.each do |tag, data|
@@ -371,6 +372,62 @@ class BxrScan < Bxr
     end
 
     return P_NORMAL
+  end
+end
+
+# Update
+class BxrUpdate < BxrScan
+  def run
+    openDb
+
+    @files = {}
+    scan '.'
+
+    filesDb = {}
+    @db.execute "SELECT path, epoctime FROM Files" do |row|
+      filesDb[row[0]] = row[1]
+    end
+
+    # removed files
+    @db.transaction do
+      removedFiles = filesDb.keys - @files.keys
+      removedFiles.each do |file|
+        removeFile file
+      end
+
+      # new files:
+      newFiles = @files.keys - filesDb.keys
+      newFiles.each do |file|
+        index file
+      end
+
+      filesDb.each do |file|
+        if @files.include? file[0] and @files[file[0]] != file[1]
+          removeFile file[0]
+          index file[0]
+        end
+      end
+    end
+  end
+
+  def removeFile(file)
+    puts "Removing: #{color(file, 'yellow')}"
+    @db.execute "DELETE FROM Bxr WHERE file IN (SELECT ROWID FROM Files " +
+                "WHERE path = ?)", file
+    @db.execute "DELETE FROM Files WHERE path = ?", file
+  end
+
+  def scan(path)
+    Dir.foreach path do |file|
+      next if file.start_with? '.'
+      fullpath = path + '/' + file
+
+      if File.directory? fullpath
+        scan fullpath
+      else
+        @files[fullpath] = File.mtime(fullpath).to_i
+      end
+    end
   end
 end
 
@@ -457,6 +514,7 @@ end
 # a description of what this app can do:
 class Bxr
   LIST = [ { :cmd => 'create',     :class => BxrScan       },
+           { :cmd => 'update',     :class => BxrUpdate     },
            { :cmd => 'identifier', :class => BxrIdentifier },
            { :cmd => 'search',     :class => BxrSearch     },
            { :cmd => 'file',       :class => BxrFile       } ]
@@ -471,6 +529,8 @@ opts = OptionParser.new do |opts|
   opts.separator "Operations:"
   opts.separator "- create <path>"
   opts.separator "  Scan a path and create the index file #{Bxr::CONF_FILE}"
+  opts.separator "- update"
+  opts.separator "  Update the index."
   opts.separator "- identifier <something>"
   opts.separator "  Type the full name of an identifier (a function name, variable name, typedef, etc.) to summarize."
   opts.separator "- search <something>"
