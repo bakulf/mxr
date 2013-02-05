@@ -257,9 +257,11 @@ class BxrScan < Bxr
                 "  epoctime INTEGER   " +
                 ")"
     @db.execute "CREATE INDEX BxrIndex ON Bxr (tag)"
+    @db.execute "CREATE INDEX BxrFileIndex ON Bxr (file)"
     @db.execute "CREATE INDEX TagsIndex ON Tags (tag)"
     @db.execute "CREATE INDEX PriorityIndex ON Bxr (priority)"
     @db.execute "CREATE INDEX FilesIndex ON Files (filename)"
+    @db.execute "CREATE INDEX PathIndex ON Files (path)"
 
     begin
       Dir.chdir(path)
@@ -488,7 +490,7 @@ class BxrFile < Bxr
     openDb
 
     data = []
-    @db.execute "SELECT DISTINCT filename FROM Files " +
+    @db.execute "SELECT DISTINCT path FROM Files " +
                 "WHERE filename like ? " +
                 "ORDER BY filename", "%#{@inputs[0]}%" do |row|
       data.push row
