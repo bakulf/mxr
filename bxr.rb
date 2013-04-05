@@ -7,6 +7,7 @@
 require 'rubygems'
 require 'optparse'
 require 'sqlite3'
+require 'shellwords'
 require 'yaml'
 
 class String
@@ -34,14 +35,18 @@ class Bxr
   attr_accessor :retro
   attr_accessor :color
   attr_accessor :vimode
-  attr_accessor :line
   attr_accessor :max
   attr_accessor :tool
   attr_accessor :db
   attr_accessor :settings
+  attr_accessor :showFiles
+
+  def initialize
+    @files = []
+    @showFiles = false
+  end
 
   def run
-
     # no tool:
     if @vimmode == true or @tool.nil?
       @wr = $stdout
@@ -69,6 +74,8 @@ class Bxr
       exec cmd
       exit
     end
+
+    post_task
   end
 
 protected
@@ -113,6 +120,8 @@ protected
 
     if @vimode == true
       data.each do |row|
+        @files.push({ :file => filepath(row[0]), :line => row[1]})
+
         write "#{filepath(row[0])}:#{row[1]}:"
         if row[2] != -1
           write "#{row[2]}:"
@@ -128,8 +137,13 @@ protected
       prev = nil
 
       data.each do |row|
-        write "\nFile: #{color(row[0], Bxr::FILE)}\n" if prev != row[0]
-        write "Line: #{color(row[1].to_s, Bxr::LINE)}"
+        if prev != row[0]
+          @files.push({ :file => filepath(row[0]), :line => 0})
+          write "\nFile: #{showFileId}#{color(row[0], Bxr::FILE)}\n"
+        end
+
+        @files.push({ :file => filepath(row[0]), :line => row[1]})
+        write "Line: #{showFileId}#{color(row[1].to_s, Bxr::LINE)}"
         write " -> "
         write showline row[0], row[1], what
 
@@ -178,6 +192,10 @@ protected
     end
   end
 
+  def showFileId
+    color "(#{@files.length - 1}) ", Bxr::FILEID if @showFiles == true
+  end
+
   # colorize a string
   def color(str, color, bold = false)
     if @color == true
@@ -207,6 +225,44 @@ protected
     return tags
   end
 
+  # Default Post task does nothing
+  def post_task
+  end
+
+  def edit_mode
+    return if @files.empty?
+
+    begin
+      require 'readline'
+    rescue
+      puts "lib readline is required for mxr in shell mode."
+      return
+    end
+
+    while line = Readline.readline('bxr> ', true)
+      p = Shellwords::shellwords line
+      break if p.empty?
+
+      begin
+        id = Float(p[0]).to_i
+      rescue
+        break
+      end
+
+      break if id < 0 || id >= @files.length
+
+      editor = ENV['EDITOR']
+      if editor.nil? or editor.empty?
+        puts "No EDITOR variable found"
+        break
+      end
+
+      # Bye bye
+      cmd = "#{editor} #{@files[id][:file]}"
+      cmd += " +#{@files[id][:line]}" if @files[id][:line]
+      exec cmd
+    end
+  end
 end
 
 # scan
@@ -356,6 +412,7 @@ class BxrScan < Bxr
     end
 
     if [ '.c', '.cc', '.cpp', '.cxx', '.h', '.hh', '.hpp', '.java' ].include? extension
+      return P_IDL if line.include? 'define'
       return P_CLASS if line.include? 'class' and not line.include? ';'
       begin
         return P_IMPL if line.downcase.include? "::#{tag[:tag].downcase}"
@@ -453,6 +510,10 @@ class BxrIdentifier < Bxr
 
     show "Result for: #{color(@inputs[0], Bxr::RESULT, true)}", data, @inputs[0]
   end
+
+  def post_task
+    edit_mode if @showFiles
+  end
 end
 
 class BxrSearch < Bxr
@@ -477,6 +538,10 @@ class BxrSearch < Bxr
 
     show "Result for: #{color(@inputs[0], Bxr::RESULT, true)}", data, @inputs[0]
   end
+
+  def post_task
+    edit_mode if @showFiles
+  end
 end
 
 # filenames
@@ -499,15 +564,21 @@ class BxrFile < Bxr
     show "Result for: #{color(@inputs[0], Bxr::RESULT, true)}", data, @inputs[0]
   end
 
+  def post_task
+    edit_mode if @showFiles
+  end
+
   def show(title, data, what)
     if @vimode == true
       data.each do |row|
+        @files.push({ :file => row[0], :line => 0})
         write "#{row[0]}\n"
       end
     else
       write "#{title}\n\n"
       data.each do |row|
-        write "File: #{color(row[0], Bxr::FILE)}\n"
+        @files.push({ :file => row[0], :line => 0})
+        write "File: #{showFileId}#{color(row[0], Bxr::FILE)}\n"
       end
     end
   end
@@ -549,12 +620,6 @@ opts = OptionParser.new do |opts|
     options[:max] = something.to_i
   end
 
-  options[:line] = 0
-  opts.on('-l', '--line <something>',
-          'Jump to this line.') do |something|
-    options[:line] = something.to_i
-  end
-
   options[:tool] = Bxr::PAGER
   opts.on('-t', '--tool <tool>',
           "The tool for showing the result. Default: #{Bxr::PAGER}") do |something|
@@ -583,6 +648,12 @@ opts = OptionParser.new do |opts|
   opts.on('-V', '--vi',
           'VIm output.') do
     options[:vi] = true
+  end
+
+  options[:edit] = false
+  opts.on('-e', '--edit',
+          'Offer a shell for fast editing.') do
+    options[:edit] = true
   end
 
   opts.on('-h', '--help', 'Display this screen.') do
@@ -623,10 +694,10 @@ task = op[:class].new
 ARGV.shift
 task.inputs = ARGV
 
-task.color  = options[:color]
-task.vimode = options[:vi]
-task.max    = options[:max]
-task.line   = options[:line]
-task.tool   = options[:tool]
+task.color     = options[:color]
+task.vimode    = options[:vi]
+task.max       = options[:max]
+task.tool      = options[:tool]
+task.showFiles = options[:edit]
 
 task.run
