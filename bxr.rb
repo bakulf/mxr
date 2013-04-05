@@ -120,7 +120,7 @@ protected
 
     if @vimode == true
       data.each do |row|
-        @files.push({ :file => filepath(row[0]), :line => row[1]})
+        @files.push({ :file => row[0], :line => row[1]})
 
         write "#{filepath(row[0])}:#{row[1]}:"
         if row[2] != -1
@@ -138,11 +138,11 @@ protected
 
       data.each do |row|
         if prev != row[0]
-          @files.push({ :file => filepath(row[0]), :line => 0})
+          @files.push({ :file => row[0], :line => 0})
           write "\nFile: #{showFileId}#{color(row[0], Bxr::FILE)}\n"
         end
 
-        @files.push({ :file => filepath(row[0]), :line => row[1]})
+        @files.push({ :file => row[0], :line => row[1]})
         write "Line: #{showFileId}#{color(row[1].to_s, Bxr::LINE)}"
         write " -> "
         write showline row[0], row[1], what
