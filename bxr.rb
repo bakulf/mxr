@@ -479,7 +479,9 @@ class BxrUpdate < BxrScan
   def scan(path)
     Dir.foreach path do |file|
       next if file.start_with? '.'
+
       fullpath = path + '/' + file
+      next unless File.exists? fullpath
 
       if File.directory? fullpath
         scan fullpath
