@@ -48,6 +48,8 @@ class Bxr
   end
 
   def run
+    pre_task
+
     # no tool:
     if @vimmode == true or @tool.nil?
       @wr = $stdout
@@ -70,6 +72,8 @@ class Bxr
       $stdin.reopen(rd)
 
       cmd = @tool.to_s
+      cmd += " -p #{@search}" if not @search.nil? and not @search.empty? and
+                                 (@tool == 'less' or @tool.start_with? 'less ')
       cmd += " +#{@line}" if @line.is_a? Fixnum and @line != 0
 
       exec cmd
@@ -117,8 +121,6 @@ protected
   end
 
   def show(title, data, what)
-    @search = what
-
     results = 0
 
     if @vimode == true
@@ -228,7 +230,11 @@ protected
     return tags
   end
 
-  # Default Post task does nothing
+  # Default pre task does nothing
+  def pre_task
+  end
+
+  # Default post task does nothing
   def post_task
   end
 
@@ -522,6 +528,10 @@ class BxrIdentifier < Bxr
     show "Result for: #{color(@inputs[0], Bxr::RESULT, true)}", data, @inputs[0]
   end
 
+  def pre_task
+    @search = @inputs[0]
+  end
+
   def post_task
     edit_mode if @showFiles
   end
@@ -550,6 +560,10 @@ class BxrSearch < Bxr
     show "Result for: #{color(@inputs[0], Bxr::RESULT, true)}", data, @inputs[0]
   end
 
+  def pre_task
+    @search = @inputs[0]
+  end
+
   def post_task
     edit_mode if @showFiles
   end
@@ -573,6 +587,10 @@ class BxrFile < Bxr
     end
 
     show "Result for: #{color(@inputs[0], Bxr::RESULT, true)}", data, @inputs[0]
+  end
+
+  def pre_task
+    @search = @inputs[0]
   end
 
   def post_task
