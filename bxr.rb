@@ -40,6 +40,7 @@ class Bxr
   attr_accessor :db
   attr_accessor :settings
   attr_accessor :showFiles
+  attr_accessor :search
 
   def initialize
     @files = []
@@ -116,6 +117,8 @@ protected
   end
 
   def show(title, data, what)
+    @search = what
+
     results = 0
 
     if @vimode == true
@@ -260,6 +263,12 @@ protected
       # Bye bye
       cmd = "#{editor} #{@files[id][:file]}"
       cmd += " +#{@files[id][:line]}" if @files[id][:line]
+
+      if not @search.nil? and not @search.empty? and
+         [ 'vi', 'vim', 'gvim', 'ex' ].include?(editor)
+        cmd += ' -c /' + @search
+      end
+
       exec cmd
     end
   end
