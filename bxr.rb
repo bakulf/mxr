@@ -283,8 +283,9 @@ end
 # scan
 class BxrScan < Bxr
   EXTENSIONS = [ '.c', '.cc', '.cpp', '.cxx', '.h', '.hh', '.hpp',
-                 '.idl', '.ipdl', '.java', '.js', 'jsm', '.perl', '.php', '.py',
-                 '.rb', '.rc', '.sh', '.webidl', '.xml', '.html', '.xul' ]
+                 '.idl', '.ipdl', '.java', '.js', '.jsm', '.perl', '.php',
+                 '.py', '.rb', '.rc', '.sh', '.webidl', '.xml', '.html',
+                 '.xul' ]
 
   def run
     if @inputs.length != 1
