@@ -268,11 +268,13 @@ protected
 
       # Bye bye
       cmd = "#{editor} #{@files[id][:file]}"
-      cmd += " +#{@files[id][:line]}" if @files[id][:line]
 
       if not @search.nil? and not @search.empty? and
          [ 'vi', 'vim', 'gvim', 'ex' ].include?(editor)
+        cmd += " +#{@files[id][:line] - 1}" if @files[id][:line]
         cmd += ' -c /' + @search
+      else
+        cmd += " +#{@files[id][:line]}" if @files[id][:line]
       end
 
       exec cmd
