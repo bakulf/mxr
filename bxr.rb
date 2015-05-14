@@ -127,30 +127,41 @@ protected
       data.each do |row|
         @files.push({ :file => row[0], :line => row[1]})
 
-        write "#{filepath(row[0])}:#{row[1]}:"
+        ret = write "#{filepath(row[0])}:#{row[1]}:"
+        return if ret == false
+
         if row[2] != -1
-          write "#{row[2]}:"
+          ret = write "#{row[2]}:"
+          return if ret == false
         end
-        write showline(row[0], row[1], what)
+        ret = write showline(row[0], row[1], what)
+        return if ret == false
 
         results += 1
         break if @max.is_a? Fixnum and @max != 0 and results >= @max
       end
     else
-      write "#{title}\n"
+      ret = write "#{title}\n"
+      return if ret == false
 
       prev = nil
 
       data.each do |row|
         if prev != row[0]
           @files.push({ :file => row[0], :line => 0})
-          write "\nFile: #{showFileId}#{color(row[0], Bxr::FILE)}\n"
+          ret = write "\nFile: #{showFileId}#{color(row[0], Bxr::FILE)}\n"
+          return if ret == false
         end
 
         @files.push({ :file => row[0], :line => row[1]})
-        write "Line: #{showFileId}#{color(row[1].to_s, Bxr::LINE)}"
-        write " -> "
-        write showline row[0], row[1], what
+        ret = write "Line: #{showFileId}#{color(row[1].to_s, Bxr::LINE)}"
+        return if ret == false
+
+        ret = write " -> "
+        return if ret == false
+
+        ret = write showline row[0], row[1], what
+        return if ret == false
 
         prev = row[0]
 
@@ -193,7 +204,9 @@ protected
   def write(msg)
     begin
       @wr.write msg unless @wr.nil?
+      return true
     rescue
+      return false
     end
   end
 
@@ -604,13 +617,17 @@ class BxrFile < Bxr
     if @vimode == true
       data.each do |row|
         @files.push({ :file => row[0], :line => 0})
-        write "#{row[0]}\n"
+        ret = write "#{row[0]}\n"
+        return if ret == false
       end
     else
-      write "#{title}\n\n"
+      ret = write "#{title}\n\n"
+      return if ret == false
+
       data.each do |row|
         @files.push({ :file => row[0], :line => 0})
-        write "File: #{showFileId}#{color(row[0], Bxr::FILE)}\n"
+        ret = write "File: #{showFileId}#{color(row[0], Bxr::FILE)}\n"
+        return if ret == false
       end
     end
   end
