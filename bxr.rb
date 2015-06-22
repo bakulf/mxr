@@ -725,6 +725,11 @@ end
 
 task = nil
 
+if ARGV.empty?
+  puts opts
+  exit
+end
+
 # task selection
 op = nil
 Bxr::LIST.each do |c|
