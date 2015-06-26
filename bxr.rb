@@ -9,11 +9,16 @@ require 'optparse'
 require 'sqlite3'
 require 'shellwords'
 require 'yaml'
+require 'digest/sha1'
 
 class String
   def is_number?
     true if Float(self) rescue false
   end
+end
+
+def sha1(path)
+  return Digest::SHA1.hexdigest(File.read(path))
 end
 
 # the base class
@@ -341,7 +346,7 @@ class BxrScan < Bxr
     @db.execute "CREATE TABLE Files ( " +
                 "  path     VARCHAR,  " +
                 "  filename VARCHAR,  " +
-                "  epoctime INTEGER   " +
+                "  sha1     VARCHAR   " +
                 ")"
     @db.execute "CREATE INDEX BxrIndex ON Bxr (tag)"
     @db.execute "CREATE INDEX BxrFileIndex ON Bxr (file)"
@@ -401,7 +406,7 @@ class BxrScan < Bxr
     end
 
     id = 0
-    @db.execute "INSERT INTO Files VALUES(?,?,?)", path, basename, File.mtime(path).to_i
+    @db.execute "INSERT INTO Files VALUES(?,?,?)", path, basename, sha1(path)
     id = @db.last_insert_row_id
 
     file_tags.each do |tag, data|
@@ -474,7 +479,7 @@ class BxrUpdate < BxrScan
     scan '.'
 
     filesDb = {}
-    @db.execute "SELECT path, epoctime FROM Files" do |row|
+    @db.execute "SELECT path, sha1 FROM Files" do |row|
       filesDb[row[0]] = row[1]
     end
 
@@ -517,7 +522,7 @@ class BxrUpdate < BxrScan
       if File.directory? fullpath
         scan fullpath
       else
-        @files[fullpath] = File.mtime(fullpath).to_i
+        @files[fullpath] = sha1(fullpath)
       end
     end
   end
