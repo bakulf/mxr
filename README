@@ -9,6 +9,8 @@ mxr.rb - a tool for having mxr.mozilla.org in command line mode.
 
 Requirements
 ------------
+*ruby-dev*
+apt-get install ruby-dev
 
 *hpricot* (only for mxr.rb)
 Url: https://github.com/hpricot/hpricot
