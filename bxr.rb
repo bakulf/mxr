@@ -303,8 +303,8 @@ end
 # scan
 class BxrScan < Bxr
   EXTENSIONS = [ '.c', '.cc', '.cpp', '.cxx', '.h', '.hh', '.hpp',
-                 '.idl', '.ipdl', '.java', '.js', '.jsm', '.perl', '.php',
-                 '.py', '.rb', '.rc', '.sh', '.webidl', '.xml', '.html',
+                 '.idl', '.ipdl', '.ipdlh', '.java', '.js', '.jsm', '.perl',
+                 '.php', '.py', '.rb', '.rc', '.sh', '.webidl', '.xml', '.html',
                  '.xul' ]
 
   def run
@@ -531,13 +531,6 @@ end
 # identifier
 class BxrIdentifier < Bxr
   def task
-    if @inputs.length != 1
-      puts "One and Just one argument is needed."
-      return false
-    end
-
-    openDb
-
     data = []
     @db.execute "SELECT Files.path, Bxr.line, Bxr.column " +
                 "FROM Bxr, Tags, Files " +
@@ -550,6 +543,12 @@ class BxrIdentifier < Bxr
   end
 
   def pre_task
+    if @inputs.length != 1
+      puts "One and Just one argument is needed."
+      exit
+    end
+
+    openDb
     @search = @inputs[0]
   end
 
@@ -560,13 +559,6 @@ end
 
 class BxrSearch < Bxr
   def task
-    if @inputs.length != 1
-      puts "One and Just one argument is needed."
-      return false
-    end
-
-    openDb
-
     tags = readtags @inputs[0] + " "
 
     data = []
@@ -582,6 +574,12 @@ class BxrSearch < Bxr
   end
 
   def pre_task
+    if @inputs.length != 1
+      puts "One and Just one argument is needed."
+      exit
+    end
+
+    openDb
     @search = @inputs[0]
   end
 
@@ -593,13 +591,6 @@ end
 # filenames
 class BxrFile < Bxr
   def task
-    if @inputs.length != 1
-      puts "One and Just one argument is needed."
-      return false
-    end
-
-    openDb
-
     data = []
     @db.execute "SELECT DISTINCT path FROM Files " +
                 "WHERE filename like ? " +
@@ -611,6 +602,12 @@ class BxrFile < Bxr
   end
 
   def pre_task
+    if @inputs.length != 1
+      puts "One and Just one argument is needed."
+      exit
+    end
+
+    openDb
     @search = @inputs[0]
   end
 

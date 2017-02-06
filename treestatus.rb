@@ -12,7 +12,7 @@ def printstatus(what, title)
   status = what['status']
   if status == 'closed'
     status = status.red
-  elsif status == 'opened'
+  elsif status == 'open'
     status = status.green
   else
     status = status.yellow
@@ -21,7 +21,7 @@ def printstatus(what, title)
   puts "#{title}: #{status.bold}"
 end
 
-uri = URI('https://treestatus.mozilla.org/?format=json')
+uri = URI('https://treestatus.mozilla-releng.net/trees?format=json')
 
 res = Net::HTTP.get_response(uri)
 if not res.is_a?(Net::HTTPSuccess)
@@ -31,5 +31,10 @@ end
 
 json = JSON.parse res.body
 
-printstatus json['try'], 'try' if json.include? 'try'
-printstatus json['mozilla-inbound'], 'm-i' if json.include? 'mozilla-inbound'
+if json.nil? or not json.include? 'result'
+  puts "Something went wrong (2)."
+  exit
+end
+
+printstatus json['result']['try'], 'try' if json['result'].include? 'try'
+printstatus json['result']['mozilla-inbound'], 'm-i' if json['result'].include? 'mozilla-inbound'
